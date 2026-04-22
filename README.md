@@ -24,7 +24,8 @@ An Android application for automatic media slideshow playback (images and video)
 - Periodic server polling every 60 seconds to refresh the playlist
 - On-disk media file caching — works offline after the first load
 - Loading progress indicator with status text (Loading / Extracting N of M)
-- In-session `screenKey` dialog — change the key at runtime without restarting the app
+- Error screen on initial load failure with a **Retry** button
+- `screenKey` dialog — change the key at runtime; the new key is **persisted across restarts** via DataStore Preferences
 - Slideshow position preserved on screen rotation
 - UI localisation: English, Russian, Ukrainian
 
@@ -38,15 +39,15 @@ The project follows **Clean Architecture** with clear layer separation:
 ┌──────────────────────────────────────────┐
 │                   View                   │  Compose UI (MainActivity, SlideshowPlayer)
 ├──────────────────────────────────────────┤
-│                ViewModel                 │  MainViewModel (state, polling, dialog)
+│                ViewModel                 │  MainViewModel (state, polling, dialog, retry)
 ├──────────────────────────────────────────┤
-│               Interactor                 │  Business logic: download + cache
+│               Interactor                 │  Business logic: download + cache + screen key
 ├──────────────────────────────────────────┤
-│               Use Case                   │  FetchPlaylistUseCase (response mapping)
+│               Use Case                   │  Fetch/Update playlist, Fetch/Update screenKey
 ├──────────────────────────────────────────┤
-│              Repository                  │  Abstraction over network and storage
+│              Repository                  │  Abstraction over network, storage and key store
 ├──────────────────────────────────────────┤
-│          Network / Storage               │  Retrofit (ApiService), FileStorage
+│          Network / Storage               │  Retrofit (ApiService), FileStorage, DataStore
 └──────────────────────────────────────────┘
 ```
 
@@ -70,10 +71,30 @@ PlaylistRepository ──► FetchPlaylistUseCase
                                 ▼
                         MainViewModel
                         (StateFlow → UI)
-                                │
-                                ▼
-                        SlideshowPlayer
-                        (Compose, ExoPlayer, Coil)
+                           │        │
+                     (success)   (error / empty)
+                           │        │
+                           ▼        ▼
+                   SlideshowPlayer  Error screen
+                   (Compose,        (message + Retry button)
+                    ExoPlayer, Coil)
+```
+
+### Screen Key Flow
+
+```
+App start
+    │
+    ▼
+FetchScreenKeyUsecase
+    ├── DataStore has saved key? ──► use saved key
+    └── no? ──────────────────────► use BuildConfig.SCREEN_KEY (default)
+                                            │
+                                    User changes key in dialog
+                                            │
+                                    UpdateScreenKeyUsecase
+                                            │
+                                    DataStore (persisted)
 ```
 
 ### Key Design Decisions
@@ -83,9 +104,11 @@ PlaylistRepository ──► FetchPlaylistUseCase
 | `ViewModel` + `StateFlow` | State survives screen rotation |
 | `rememberSaveable` for slide index | Playlist position is preserved across Activity recreation |
 | `playlistFingerprint` in `LaunchedEffect` | Resets position only when playlist content actually changes, not on rotation |
-| `ScreenKeyProvider` (singleton) | Session-scoped key storage without persistence |
+| `DataStore Preferences` (`KeyStorageImpl`) | `screenKey` is persisted across app restarts; replaces the former session-only `ScreenKeyProvider` |
+| `LoadingState.Error` | Initial load failures (empty playlist, no network, no cache) are surfaced to the UI instead of showing an infinite spinner |
+| `retryLoading()` in ViewModel | Cancels the current polling job and restarts it; resets `LoadingState` to `Idle` |
 | `LoadingProgress` (singleton + StateFlow) | Loading progress is propagated from interactors to ViewModel without changing interfaces |
-| `pollingEnabled` (`@VisibleForTesting`) | Controls the infinite polling loop in tests |
+| `pollingEnabled` (`@VisibleForTesting`) | Controls the infinite polling loop in tests without changing production logic |
 
 ---
 
@@ -98,13 +121,14 @@ app/src/main/java/com/my/slideshowapp/
 │
 ├── di/                             # Hilt modules
 │   ├── NetworkModule.kt            # Retrofit, OkHttp
-│   ├── RepositoryModule.kt         # PlaylistRepository, SlideshowRepository
-│   ├── StorageModule.kt            # FileStorage
-│   └── InteractorModule.kt         # SlideshowInteractor, ReadSlideshowInteractor
+│   ├── RepositoryModule.kt         # PlaylistRepository, SlideshowRepository, ScreenKeyRepository
+│   ├── StorageModule.kt            # FileStorage, KeyStorage
+│   └── InteractorModule.kt         # SlideshowInteractor, ReadSlideshowInteractor,
+│                                   #   ScreenKeyInteractor, ScreenKeySaveInteractor
 │
 ├── model/
-│   ├── ScreenKeyProvider.kt        # Singleton: session screenKey
-│   ├── LoadingState.kt             # Sealed class for loading states + LoadingProgress
+│   ├── ScreenKeyProvider.kt        # Legacy singleton (kept for reference; superseded by DataStore)
+│   ├── LoadingState.kt             # Sealed class: Idle / Loading / Extracting / Done / Error
 │   │
 │   ├── entity/
 │   │   ├── MediaItem.kt            # Slide model for UI
@@ -116,29 +140,40 @@ app/src/main/java/com/my/slideshowapp/
 │   │   └── RetrofitClient.kt       # HTTP client setup
 │   │
 │   ├── storage/
-│   │   └── FileStorage.kt          # File storage interface
+│   │   ├── FileStorage.kt          # File storage interface
+│   │   └── KeyStorage.kt           # Screen key storage interface
 │   │
 │   ├── repository/
-│   │   ├── PlaylistRepository.kt   # Interface
+│   │   ├── PlaylistRepository.kt
 │   │   ├── PlaylistRepositoryImpl.kt
-│   │   ├── SlideshowRepository.kt  # Interface
-│   │   └── SlideshowRepositoryImpl.kt
+│   │   ├── SlideshowRepository.kt
+│   │   ├── SlideshowRepositoryImpl.kt
+│   │   ├── ScreenKeyRepository.kt  # Interface: get/save screenKey
+│   │   └── ScreenKeyRepositoryImpl.kt
 │   │
 │   ├── usecase/
-│   │   ├── BaseUseCase.kt
-│   │   └── FetchPlaylistUseCase.kt # Maps playlist response → list of PlaylistItem
+│   │   ├── BaseFetchUseCase.kt
+│   │   ├── BaseUpdateUseCase.kt
+│   │   ├── FetchPlaylistUseCase.kt     # Maps playlist response → list of PlaylistItem
+│   │   ├── FetchScreenKeyUsecase.kt    # Returns saved key or BuildConfig default
+│   │   └── UpdateScreenKeyUsecase.kt   # Persists new key to DataStore
 │   │
 │   └── interactor/
-│       ├── SlideshowInteractor.kt          # Interface (write path)
+│       ├── SlideshowInteractor.kt
 │       ├── SlideshowInteractorImpl.kt      # Downloads + saves to disk
-│       ├── ReadSlideshowInteractor.kt      # Interface (read path)
-│       └── ReadSlideshowInteractorImpl.kt  # Reads from cache (manifest.json)
+│       ├── ReadSlideshowInteractor.kt
+│       ├── ReadSlideshowInteractorImpl.kt  # Reads from cache (manifest.json)
+│       ├── ScreenKeyInteractor.kt          # Interface: fetch current key
+│       ├── ScreenKeyFetchInteractorImpl.kt
+│       ├── ScreenKeySaveInteractor.kt      # Interface: persist new key
+│       └── ScreenKeySaveInteractorImpl.kt
 │
 ├── view/
 │   ├── MainActivity.kt             # Single Activity
-│   ├── SlideshowPlayer.kt          # Compose: slideshow, animations, controls
+│   ├── SlideshowPlayer.kt          # Compose: slideshow, animations, controls, error screen
 │   ├── utils/
-│   │   └── FileStorageImpl.kt      # FileStorage implementation
+│   │   ├── FileStorageImpl.kt      # FileStorage implementation
+│   │   └── KeyStorageImpl.kt       # KeyStorage implementation (DataStore Preferences)
 │   └── theme/
 │       ├── Color.kt
 │       ├── Theme.kt
@@ -146,7 +181,10 @@ app/src/main/java/com/my/slideshowapp/
 │
 └── viewmodel/
     └── MainViewModel.kt            # StateFlow: mediaItems, isPlaying, skipCount,
-                                    #   showScreenKeyDialog, loadingState
+                                    #   showScreenKeyDialog, loadingState,
+                                    #   currentScreenIdState
+                                    # Actions: togglePlayback, skip, confirmScreenKey,
+                                    #   retryLoading
 ```
 
 ---
@@ -161,6 +199,7 @@ app/src/main/java/com/my/slideshowapp/
 | Network | Retrofit 2 + OkHttp | 2.11.0 / 4.12.0 |
 | Serialization | kotlinx.serialization | 1.7.3 |
 | DI | Hilt | 2.54 |
+| Persistence | DataStore Preferences | 1.1.x |
 | Logging | Timber | 5.0.1 |
 | Testing | JUnit 4 + kotlinx-coroutines-test | 4.13.2 / 1.9.0 |
 | Kotlin | — | 2.1.0 |
@@ -171,13 +210,13 @@ app/src/main/java/com/my/slideshowapp/
 
 ## Configuration
 
-The `screenKey` is set in `app/build.gradle.kts`:
+The default `screenKey` is set in `app/build.gradle.kts`:
 
 ```kotlin
 buildConfigField("String", "SCREEN_KEY", "\"your-screen-key-here\"")
 ```
 
-The value from `BuildConfig.SCREEN_KEY` is used as the pre-filled default on app start. During runtime, the key can be changed via the 🔑 button in the control bar — without restarting the app, for the current session only.
+`BuildConfig.SCREEN_KEY` is used as the fallback when no key has been saved yet. Once the user sets a key via the 🔑 button in the control bar, it is saved to **DataStore Preferences** and used on all subsequent launches. The key can be changed again at any time without restarting the app.
 
 ---
 
@@ -192,66 +231,47 @@ app/src/test/java/com/my/slideshowapp/
 │
 ├── model/repository/
 │   ├── FakeApiService.kt                   # Fake: ApiService
+│   ├── FakeScreenKeyRepository.kt          # Fake: ScreenKeyRepository
 │   ├── PlaylistRepositoryImplTest.kt       # 4 tests
 │   └── SlideshowRepositoryImplTest.kt      # 4 tests
 │
 ├── model/usecase/
 │   ├── FakePlaylistRepository.kt           # Fake: PlaylistRepository
-│   └── FetchPlaylistUseCaseTest.kt         # 7 tests
+│   ├── FetchPlaylistUseCaseTest.kt         # 7 tests
+│   ├── FetchScreenKeyUsecaseTest.kt        # 4 tests
+│   └── UpdateScreenKeyUsecaseTest.kt       # 3 tests
 │
 ├── model/interactor/
 │   ├── FakeFileStorage.kt                  # Fake: FileStorage (in-memory)
 │   ├── FakeSlideshowRepository.kt          # Fake: SlideshowRepository
 │   ├── FakeFetchPlaylistUseCase.kt         # Fake: FetchPlaylistUseCase
-│   ├── SlideshowInteractorImplTest.kt      # 8 tests
+│   ├── SlideshowInteractorImplTest.kt      # 9 tests
 │   └── ReadSlideshowInteractorImplTest.kt  # 6 tests
 │
 └── viewmodel/
     ├── FakeSlideshowInteractor.kt          # Fake: SlideshowInteractor
     ├── FakeReadSlideshowInteractor.kt      # Fake: ReadSlideshowInteractor
-    └── MainViewModelTest.kt               # 17 tests
+    ├── FakeScreenKeySaveInteractor.kt      # Fake: ScreenKeySaveInteractor
+    ├── FakeScreenKeyInteractor.kt          # Fake: ScreenKeyInteractor
+    └── MainViewModelTest.kt               # 23 tests
 ```
 
-**Total: 46 unit tests**
+**Total: 60 unit tests**
 
 ### Coverage by Layer
 
 | Layer | Class | Tests | What is covered |
 |---|---|---|---|
-| Repository | `PlaylistRepositoryImpl` | 4 | key forwarding, response mapping, exceptions |
+| Repository | `PlaylistRepositoryImpl` | 4 | key from repository, response mapping, exceptions |
 | Repository | `SlideshowRepositoryImpl` | 4 | bytes from response body, key forwarding, exceptions |
 | Use Case | `FetchPlaylistUseCase` | 7 | flatMap across playlists, null keys, empty lists |
-| Interactor | `SlideshowInteractorImpl` | 8 | download, skip existing, manifest, partial failure |
+| Use Case | `FetchScreenKeyUsecase` | 4 | stored key returned; null/empty falls back to `BuildConfig.SCREEN_KEY` |
+| Use Case | `UpdateScreenKeyUsecase` | 3 | saves to repository, overwrites existing, propagates exceptions |
+| Interactor | `SlideshowInteractorImpl` | 9 | download, skip existing, manifest, partial failure |
 | Interactor | `ReadSlideshowInteractorImpl` | 6 | cache reading, null keys, default duration, malformed JSON |
-| ViewModel | `MainViewModel` | 17 | dialog state, playback controls, polling write/read paths, LoadingState |
+| ViewModel | `MainViewModel` | 23 | dialog state, key persistence, `currentScreenIdState`, playback controls, polling write/read/error paths, `LoadingState`, `retryLoading` |
 
 ### ViewModel Testing Notes
 
 - `Dispatchers.setMain(StandardTestDispatcher())` + `runTest(testDispatcher)` — shared scheduler for `viewModelScope` and test coroutines
-- `runCurrent()` instead of `advanceUntilIdle()` for a single polling iteration — prevents infinite `delay` advancement
-- `pollingEnabled = false` (`@VisibleForTesting`) — controls exit from `while(true)` without changing production logic
-
----
-
-## Changelog
-
-### Features
-- ✅ Slideshow with cross-fade animation (images via Coil, video via ExoPlayer)
-- ✅ Periodic server polling (60 s), playlist updated only when keys change
-- ✅ Fallback to local cache (`manifest.json`) when network is unavailable
-- ✅ Loading indicator with progress (Loading N of M / Extracting N of M)
-- ✅ In-session `screenKey` change dialog without app restart
-- ✅ Control bar: pause, skip slide, screen key button
-
-### UX / Stability
-- ✅ Slideshow position preserved on screen rotation (`rememberSaveable` + fingerprint comparison)
-- ✅ Position reset only on actual playlist content change
-- ✅ Localisation: English / Russian / Ukrainian (all strings in `strings.xml`)
-
-### Code Quality
-- ✅ 46 unit tests with no mocks — fake interface implementations only
-- ✅ Full layer coverage: Repository → UseCase → Interactor → ViewModel
-- ✅ KDoc in English for all public entity classes
-
-
-
+- `runCurrent()` for a single polling
