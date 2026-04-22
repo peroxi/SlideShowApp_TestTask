@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">SlideshowApp</string>
+
+    <!-- Screen key dialog -->
+    <string name="dialog_screen_key_title">Input Screen Key</string>
+    <string name="dialog_screen_key_label">Screen Key</string>
+    <string name="dialog_screen_key_apply">Apply</string>
+    <string name="dialog_screen_key_cancel">Cancel</string>
+
+    <!-- Loading screen -->
+    <string name="loading_default">Loading…</string>
+    <string name="loading_progress">Loading %1$d of %2$d</string>
+    <string name="extracting_progress">Extracting %1$d of %2$d</string>
+
+    <!-- Playback controls -->
+    <string name="cd_pause">Pause</string>
+    <string name="cd_play">Play</string>
+    <string name="cd_skip">Skip</string>
+    <string name="cd_screen_key">Screen Key</string>
+</resources>
