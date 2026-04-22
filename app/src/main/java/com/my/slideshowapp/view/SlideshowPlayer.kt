@@ -20,8 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,29 +76,63 @@ fun SlideshowPlayer(
     onTogglePlayback: () -> Unit = {},
     onSkip: () -> Unit = {},
     onEditScreenKey: () -> Unit = {},
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.background(Color.Black)) {
         if (mediaItems.isEmpty()) {
-            val statusText = when (loadingState) {
-                is LoadingState.Loading ->
-                    stringResource(R.string.loading_progress, loadingState.current, loadingState.total)
-                is LoadingState.Extracting ->
-                    stringResource(R.string.extracting_progress, loadingState.current, loadingState.total)
-                else -> stringResource(R.string.loading_default)
-            }
-            Column(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                CircularProgressIndicator(color = Color.White)
-                Text(
-                    text = statusText,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
+            when (loadingState) {
+                is LoadingState.Error -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.error_load_failed),
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Button(
+                            onClick = onRetry,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.error_retry),
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    val statusText = when (loadingState) {
+                        is LoadingState.Loading ->
+                            stringResource(R.string.loading_progress, loadingState.current, loadingState.total)
+                        is LoadingState.Extracting ->
+                            stringResource(R.string.extracting_progress, loadingState.current, loadingState.total)
+                        else -> stringResource(R.string.loading_default)
+                    }
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(color = Color.White)
+                        Text(
+                            text = statusText,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
             }
             return@Box
         }

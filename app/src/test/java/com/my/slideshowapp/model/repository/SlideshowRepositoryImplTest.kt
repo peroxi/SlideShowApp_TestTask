@@ -7,12 +7,12 @@ import org.junit.Test
 class SlideshowRepositoryImplTest {
 
     @Test
-    fun `fetchCreative returns bytes from api response body`() = runBlocking {
+    fun `fetchCreative returns stream with correct bytes from api response body`() = runBlocking {
         val expectedBytes = byteArrayOf(1, 2, 3, 4, 5)
         val fakeApi = FakeApiService(creativeBytes = expectedBytes)
         val repository = SlideshowRepositoryImpl(fakeApi)
 
-        val result = repository.fetchCreative("some-key")
+        val result = repository.fetchCreative("some-key").readBytes()
 
         assertEquals(expectedBytes.toList(), result.toList())
     }
@@ -28,11 +28,11 @@ class SlideshowRepositoryImplTest {
     }
 
     @Test
-    fun `fetchCreative returns empty bytes when api returns empty body`() = runBlocking {
+    fun `fetchCreative returns empty stream when api returns empty body`() = runBlocking {
         val fakeApi = FakeApiService(creativeBytes = ByteArray(0))
         val repository = SlideshowRepositoryImpl(fakeApi)
 
-        val result = repository.fetchCreative("key")
+        val result = repository.fetchCreative("key").readBytes()
 
         assertEquals(0, result.size)
     }
@@ -47,4 +47,3 @@ class SlideshowRepositoryImplTest {
         assertEquals("Download failed", exception?.message)
     }
 }
-

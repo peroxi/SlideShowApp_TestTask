@@ -25,7 +25,7 @@ class FetchPlaylistUseCaseTest {
                 Playlist(playlistKey = "p2", playlistItems = items2)
             )
         )
-        val useCase = FetchPlaylistUseCase(FakePlaylistRepository(response))
+        val useCase = FetchPlaylistFetchUseCase(FakePlaylistRepository(response))
 
         val result = useCase.execute()
 
@@ -35,7 +35,7 @@ class FetchPlaylistUseCaseTest {
 
     @Test
     fun `execute returns empty list when response has no playlists`() = runBlocking {
-        val useCase = FetchPlaylistUseCase(
+        val useCase = FetchPlaylistFetchUseCase(
             FakePlaylistRepository(PlaylistItemsResponse(playlists = null))
         )
 
@@ -46,7 +46,7 @@ class FetchPlaylistUseCaseTest {
 
     @Test
     fun `execute returns empty list when playlists list is empty`() = runBlocking {
-        val useCase = FetchPlaylistUseCase(
+        val useCase = FetchPlaylistFetchUseCase(
             FakePlaylistRepository(PlaylistItemsResponse(playlists = emptyList()))
         )
 
@@ -63,7 +63,7 @@ class FetchPlaylistUseCaseTest {
                 Playlist(playlistKey = "p2", playlistItems = listOf(PlaylistItem(creativeKey = "x", duration = 5)))
             )
         )
-        val useCase = FetchPlaylistUseCase(FakePlaylistRepository(response))
+        val useCase = FetchPlaylistFetchUseCase(FakePlaylistRepository(response))
 
         val result = useCase.execute()
 
@@ -79,7 +79,7 @@ class FetchPlaylistUseCaseTest {
                 Playlist(playlistKey = "p2", playlistItems = null)
             )
         )
-        val useCase = FetchPlaylistUseCase(FakePlaylistRepository(response))
+        val useCase = FetchPlaylistFetchUseCase(FakePlaylistRepository(response))
 
         val result = useCase.execute()
 
@@ -89,7 +89,7 @@ class FetchPlaylistUseCaseTest {
     @Test
     fun `execute calls repository exactly once`() = runBlocking {
         val fakeRepo = FakePlaylistRepository(PlaylistItemsResponse())
-        val useCase = FetchPlaylistUseCase(fakeRepo)
+        val useCase = FetchPlaylistFetchUseCase(fakeRepo)
 
         useCase.execute()
 
@@ -99,7 +99,7 @@ class FetchPlaylistUseCaseTest {
     @Test
     fun `execute propagates exception from repository`() = runBlocking {
         val fakeRepo = FakePlaylistRepository(throwOn = RuntimeException("Fetch failed"))
-        val useCase = FetchPlaylistUseCase(fakeRepo)
+        val useCase = FetchPlaylistFetchUseCase(fakeRepo)
 
         val exception = runCatching { useCase.execute() }.exceptionOrNull()
 

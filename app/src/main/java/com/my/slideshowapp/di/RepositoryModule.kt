@@ -2,6 +2,8 @@ package com.my.slideshowapp.di
 
 import com.my.slideshowapp.model.repository.PlaylistRepository
 import com.my.slideshowapp.model.repository.PlaylistRepositoryImpl
+import com.my.slideshowapp.model.repository.ScreenKeyRepository
+import com.my.slideshowapp.model.repository.ScreenKeyRepositoryImpl
 import com.my.slideshowapp.model.repository.SlideshowRepository
 import com.my.slideshowapp.model.repository.SlideshowRepositoryImpl
 import dagger.Binds
@@ -21,5 +23,9 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindPlaylistRepository(impl: PlaylistRepositoryImpl): PlaylistRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindScreenKeyRepository(impl: ScreenKeyRepositoryImpl): ScreenKeyRepository
 }
 

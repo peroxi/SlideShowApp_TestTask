@@ -18,7 +18,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.my.slideshowapp.R
-import com.my.slideshowapp.model.ScreenKeyProvider
 import com.my.slideshowapp.view.theme.SlideshowAppTheme
 import com.my.slideshowapp.viewmodel.MainViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -39,9 +38,10 @@ class MainActivity : ComponentActivity() {
                 val skipCount by viewModel.skipCount.collectAsState()
                 val showDialog by viewModel.showScreenKeyDialog.collectAsState()
                 val loadingState by viewModel.loadingState.collectAsState()
+                val currentScreenId by viewModel.currentScreenIdState.collectAsState("")
 
                 if (showDialog) {
-                    var keyInput by rememberSaveable { mutableStateOf(ScreenKeyProvider.screenKey) }
+                    var keyInput by rememberSaveable { mutableStateOf(currentScreenId) }
                     AlertDialog(
                         onDismissRequest = { viewModel.dismissScreenKeyDialog() },
                         title = { Text(stringResource(R.string.dialog_screen_key_title)) },
@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     onTogglePlayback = viewModel::togglePlayback,
                     onSkip = viewModel::skip,
                     onEditScreenKey = viewModel::openScreenKeyDialog,
+                    onRetry = viewModel::retryLoading,
                     modifier = Modifier.fillMaxSize()
                 )
             }

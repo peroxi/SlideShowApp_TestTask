@@ -5,6 +5,7 @@ import com.my.slideshowapp.model.storage.FileStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.io.File
+import java.io.InputStream
 import javax.inject.Inject
 
 class FileStorageImpl @Inject constructor(
@@ -21,6 +22,36 @@ class FileStorageImpl @Inject constructor(
             true
         } catch (e: Exception) {
             Timber.e(e, "Error saving file '$fileName'")
+            false
+        }
+    }
+
+    override fun writeStream(fileName: String, stream: InputStream): Boolean {
+        return try {
+            getFile(fileName).outputStream().use { out ->
+                stream.copyTo(out)
+            }
+            Timber.d("File '$fileName' written from stream")
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "Error writing stream to file '$fileName'")
+            false
+        }
+    }
+
+    override fun renameFile(from: String, to: String): Boolean {
+        return try {
+            val src = getFile(from)
+            val dst = getFile(to)
+            val result = src.renameTo(dst)
+            if (result) {
+                Timber.d("File renamed '$from' → '$to'")
+            } else {
+                Timber.w("Failed to rename '$from' → '$to'")
+            }
+            result
+        } catch (e: Exception) {
+            Timber.e(e, "Error renaming '$from' → '$to'")
             false
         }
     }

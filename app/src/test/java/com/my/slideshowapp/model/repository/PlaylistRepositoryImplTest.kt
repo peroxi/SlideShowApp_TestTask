@@ -1,6 +1,5 @@
 package com.my.slideshowapp.model.repository
 
-import com.my.slideshowapp.model.ScreenKeyProvider
 import com.my.slideshowapp.model.entity.PlaylistItemsResponse
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -13,8 +12,8 @@ class PlaylistRepositoryImplTest {
     fun `fetchPlaylistItems passes screenKey to api and returns response`() = runBlocking {
         val expected = PlaylistItemsResponse(screenKey = "test-key")
         val fakeApi = FakeApiService(playlistResponse = expected)
-        val repository = PlaylistRepositoryImpl(fakeApi)
-        ScreenKeyProvider.screenKey = "test-key"
+        val screenKeyRepository = FakeScreenKeyRepository("test-key")
+        val repository = PlaylistRepositoryImpl(fakeApi, screenKeyRepository)
 
         val result = repository.fetchPlaylistItems()
 
@@ -27,8 +26,8 @@ class PlaylistRepositoryImplTest {
         val fakeApi = FakeApiService(
             playlistResponse = PlaylistItemsResponse(screenKey = "key", playlists = null)
         )
-        val repository = PlaylistRepositoryImpl(fakeApi)
-        ScreenKeyProvider.screenKey = "key"
+        val screenKeyRepository = FakeScreenKeyRepository("key")
+        val repository = PlaylistRepositoryImpl(fakeApi, screenKeyRepository)
 
         val result = repository.fetchPlaylistItems()
 
@@ -36,10 +35,10 @@ class PlaylistRepositoryImplTest {
     }
 
     @Test
-    fun `fetchPlaylistItems uses current ScreenKeyProvider value`() = runBlocking {
+    fun `fetchPlaylistItems uses screenKey from repository`() = runBlocking {
         val fakeApi = FakeApiService(playlistResponse = PlaylistItemsResponse(screenKey = "abc"))
-        val repository = PlaylistRepositoryImpl(fakeApi)
-        ScreenKeyProvider.screenKey = "abc"
+        val screenKeyRepository = FakeScreenKeyRepository("abc")
+        val repository = PlaylistRepositoryImpl(fakeApi, screenKeyRepository)
 
         repository.fetchPlaylistItems()
 
@@ -49,12 +48,11 @@ class PlaylistRepositoryImplTest {
     @Test
     fun `fetchPlaylistItems propagates exception from api`() = runBlocking {
         val fakeApi = FakeApiService(throwOnPlaylist = RuntimeException("Network error"))
-        val repository = PlaylistRepositoryImpl(fakeApi)
-        ScreenKeyProvider.screenKey = "key"
+        val screenKeyRepository = FakeScreenKeyRepository("key")
+        val repository = PlaylistRepositoryImpl(fakeApi, screenKeyRepository)
 
         val exception = runCatching { repository.fetchPlaylistItems() }.exceptionOrNull()
 
         assertEquals("Network error", exception?.message)
     }
 }
-

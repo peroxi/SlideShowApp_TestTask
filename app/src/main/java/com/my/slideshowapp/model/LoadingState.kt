@@ -9,6 +9,7 @@ sealed class LoadingState {
     data class Loading(val current: Int, val total: Int) : LoadingState()
     data class Extracting(val current: Int, val total: Int) : LoadingState()
     data object Done : LoadingState()
+    data class Error(val message: String) : LoadingState()
 }
 
 object LoadingProgress {

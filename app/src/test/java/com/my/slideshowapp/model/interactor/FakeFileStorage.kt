@@ -1,6 +1,7 @@
 package com.my.slideshowapp.model.interactor
 
 import com.my.slideshowapp.model.storage.FileStorage
+import java.io.InputStream
 
 internal class FakeFileStorage : FileStorage {
 
@@ -9,6 +10,17 @@ internal class FakeFileStorage : FileStorage {
 
     override fun saveFile(fileName: String, data: ByteArray): Boolean {
         files[fileName] = data
+        return true
+    }
+
+    override fun writeStream(fileName: String, stream: InputStream): Boolean {
+        files[fileName] = stream.readBytes()
+        return true
+    }
+
+    override fun renameFile(from: String, to: String): Boolean {
+        val data = files.remove(from) ?: return false
+        files[to] = data
         return true
     }
 
@@ -26,4 +38,3 @@ internal class FakeFileStorage : FileStorage {
     override fun listFiles(prefix: String): List<String> =
         files.keys.filter { it.startsWith(prefix) }
 }
-

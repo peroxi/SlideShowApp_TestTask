@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.InputStream
 
 class SlideshowInteractorImplTest {
 
@@ -17,7 +18,7 @@ class SlideshowInteractorImplTest {
         repoThrow: Throwable? = null,
         preloadedFiles: Map<String, ByteArray> = emptyMap()
     ): Triple<SlideshowInteractorImpl, FakeSlideshowRepository, FakeFileStorage> {
-        val useCase = FakeFetchPlaylistUseCase(useCaseItems, useCaseThrow)
+        val useCase = FakeFetchPlaylistFetchUseCase(useCaseItems, useCaseThrow)
         val repo = FakeSlideshowRepository(bytesPerKey, repoThrow)
         val storage = FakeFileStorage().also { fs ->
             preloadedFiles.forEach { (name, data) -> fs.saveFile(name, data) }
@@ -120,29 +121,55 @@ class SlideshowInteractorImplTest {
     }
 
     @Test
-    fun `invoke continues when download of one file fails`() = runBlocking {
+    fun `invoke aborts and returns empty list when file fails after retry`() = runBlocking {
         val items = listOf(
             PlaylistItem(creativeKey = "bad.jpg", duration = 5),
             PlaylistItem(creativeKey = "good.jpg", duration = 3)
         )
-        val repo = FakeSlideshowRepository(
-            bytesPerKey = mapOf("good.jpg" to byteArrayOf(1)),
-            throwOn = null
-        )
-        // Override to throw only for "bad.jpg"
+        // "bad.jpg" always throws, "good.jpg" always succeeds
         val throwingRepo = object : SlideshowRepository {
-            override suspend fun fetchCreative(creativeKey: String): ByteArray {
+            override suspend fun fetchCreative(creativeKey: String): InputStream {
                 if (creativeKey == "bad.jpg") throw RuntimeException("fail")
-                return byteArrayOf(1)
+                return InputStream.nullInputStream()
             }
         }
         val storage = FakeFileStorage()
-        val useCase = FakeFetchPlaylistUseCase(items)
+        val useCase = FakeFetchPlaylistFetchUseCase(items)
         val impl = SlideshowInteractorImpl(useCase, throwingRepo, storage)
 
         val result = impl()
 
-        assertEquals(2, result.size) // both items returned even if one failed to download
+        // Entire update aborted — empty result, manifest not saved
+        assertTrue(result.isEmpty())
+        assertFalse(storage.fileExists("manifest.json"))
+    }
+
+    @Test
+    fun `invoke succeeds when retry fixes failed file`() = runBlocking {
+        val items = listOf(
+            PlaylistItem(creativeKey = "flaky.jpg", duration = 5),
+            PlaylistItem(creativeKey = "good.jpg", duration = 3)
+        )
+        var flakyCallCount = 0
+        // "flaky.jpg" fails on first attempt, succeeds on retry
+        val flakyRepo = object : SlideshowRepository {
+            override suspend fun fetchCreative(creativeKey: String): InputStream{
+                if (creativeKey == "flaky.jpg") {
+                    flakyCallCount++
+                    if (flakyCallCount == 1) throw RuntimeException("temporary fail")
+                }
+                return InputStream.nullInputStream()
+            }
+        }
+        val storage = FakeFileStorage()
+        val useCase = FakeFetchPlaylistFetchUseCase(items)
+        val impl = SlideshowInteractorImpl(useCase, flakyRepo, storage)
+
+        val result = impl()
+
+        // Retry succeeded — both items returned, manifest saved
+        assertEquals(2, result.size)
+        assertTrue(storage.fileExists("manifest.json"))
     }
 }
 

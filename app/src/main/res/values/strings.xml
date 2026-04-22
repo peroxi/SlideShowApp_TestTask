@@ -11,6 +11,9 @@
     <string name="loading_default">Loading…</string>
     <string name="loading_progress">Loading %1$d of %2$d</string>
     <string name="extracting_progress">Extracting %1$d of %2$d</string>
+    <!-- Error screen -->
+    <string name="error_load_failed">Failed to load content</string>
+    <string name="error_retry">Retry</string>
 
     <!-- Playback controls -->
     <string name="cd_pause">Pause</string>
